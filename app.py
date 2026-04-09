@@ -135,6 +135,22 @@ def format_bytes(value: int | float | None) -> str:
     return f"{size:.1f} TB"
 
 
+def explain_download_error(error: Exception) -> str:
+    message = str(error).replace("ERROR:", "").strip()
+    lowered = message.lower()
+
+    if "not a bot" in lowered or "sign in to confirm" in lowered:
+        return "YouTube blocked this server request and asked for bot verification. This usually happens on cloud hosts."
+
+    if "http error 403" in lowered or "forbidden" in lowered:
+        return "YouTube refused this request from the deployed server. This often happens on cloud hosts."
+
+    if "unable to download api page" in lowered:
+        return "The server could not reach YouTube successfully. The deployed host may be blocked."
+
+    return message or "yt-dlp could not read this video or playlist."
+
+
 def get_media_info(url: str) -> dict[str, Any]:
     options = {
         "quiet": True,
@@ -390,9 +406,12 @@ def info():
     try:
         summary = summarize_media_info(get_media_info(url))
         return jsonify({"success": True, **summary})
-    except DownloadError:
-        return jsonify({"success": False, "message": "Video or playlist is unavailable."}), 400
+    except DownloadError as error:
+        message = explain_download_error(error)
+        app.logger.warning("yt-dlp info error for %s: %s", url, message)
+        return jsonify({"success": False, "message": message}), 400
     except Exception as error:  # noqa: BLE001
+        app.logger.exception("Unexpected info error for %s", url)
         return jsonify({"success": False, "message": f"Could not read the URL: {error}"}), 500
 
 
@@ -474,9 +493,12 @@ def download():
                 "message": "Download job created successfully.",
             }
         )
-    except DownloadError:
-        return jsonify({"success": False, "message": "Video or playlist is unavailable."}), 400
+    except DownloadError as error:
+        message = explain_download_error(error)
+        app.logger.warning("yt-dlp setup error for %s: %s", url, message)
+        return jsonify({"success": False, "message": message}), 400
     except Exception as error:  # noqa: BLE001
+        app.logger.exception("Unexpected download setup error for %s", url)
         return jsonify({"success": False, "message": f"Download setup failed: {error}"}), 500
 
 
