@@ -1,7 +1,10 @@
 const form = document.getElementById("downloadForm");
 const urlInput = document.getElementById("urlInput");
+const environmentHint = document.getElementById("environmentHint");
+const downloadPathGroup = document.getElementById("downloadPathGroup");
 const downloadPathInput = document.getElementById("downloadPathInput");
 const chooseFolderButton = document.getElementById("chooseFolderButton");
+const hostedWarning = document.getElementById("hostedWarning");
 const qualitySelect = document.getElementById("qualitySelect");
 const downloadButton = document.getElementById("downloadButton");
 const buttonSpinner = document.getElementById("buttonSpinner");
@@ -52,6 +55,7 @@ function resolveApiBase() {
 const API_BASE = resolveApiBase();
 const API_LABEL = API_BASE || window.location.origin;
 const SAVED_PATH_KEY = "yt-downloader-download-path";
+const IS_LOCAL_BACKEND = API_LABEL.includes("127.0.0.1:5000") || API_LABEL.includes("localhost:5000");
 
 function apiUrl(path) {
     return `${API_BASE}${path}`;
@@ -73,7 +77,7 @@ async function readJson(response) {
 function setBusyState(busy) {
     isBusy = busy;
     downloadButton.disabled = busy;
-    chooseFolderButton.disabled = busy;
+    chooseFolderButton.disabled = busy || !IS_LOCAL_BACKEND;
     buttonSpinner.classList.toggle("hidden", !busy);
     liveSpinner.classList.toggle("hidden", !busy);
 }
@@ -132,6 +136,17 @@ function persistDownloadPath() {
 }
 
 async function chooseFolder() {
+    if (!IS_LOCAL_BACKEND) {
+        updateStatusCard({
+            title: "Local-only feature",
+            message: "Folder selection only works when the app is running locally on your own computer.",
+            percent: 0,
+            extra: "Local only",
+            state: "failed",
+        });
+        return;
+    }
+
     try {
         chooseFolderButton.disabled = true;
         chooseFolderButton.textContent = "Opening...";
@@ -380,4 +395,14 @@ form.addEventListener("submit", async (event) => {
 const savedPath = localStorage.getItem(SAVED_PATH_KEY);
 if (savedPath) {
     downloadPathInput.value = savedPath;
+}
+
+if (IS_LOCAL_BACKEND) {
+    environmentHint.innerHTML = 'Run <code>python app.py</code> first. If this page is opened directly or from Live Server, it will connect to <code>http://127.0.0.1:5000</code>.';
+    downloadPathGroup.classList.remove("hidden");
+    hostedWarning.classList.add("hidden");
+} else {
+    environmentHint.textContent = `Connected to hosted backend: ${API_LABEL}`;
+    downloadPathGroup.classList.add("hidden");
+    hostedWarning.classList.remove("hidden");
 }

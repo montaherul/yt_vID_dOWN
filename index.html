@@ -28,13 +28,14 @@
                     autocomplete="off"
                     required
                 >
-                <p class="helper-text">
+                <p id="environmentHint" class="helper-text">
                     Run <code>python app.py</code> first. If this page is opened directly
                     or from Live Server, it will connect to <code>http://127.0.0.1:5000</code>.
                 </p>
 
-                <label class="field-label" for="downloadPathInput">Download folder</label>
-                <div class="path-picker">
+                <div id="downloadPathGroup">
+                    <label class="field-label" for="downloadPathInput">Download folder</label>
+                    <div class="path-picker">
                     <input
                         id="downloadPathInput"
                         name="downloadPath"
@@ -45,10 +46,17 @@
                     <button id="chooseFolderButton" class="secondary-button" type="button">
                         Browse
                     </button>
+                    </div>
+                    <p class="helper-text">
+                        The selected folder will be used for videos, audio files, and playlist folders.
+                    </p>
                 </div>
-                <p class="helper-text">
-                    The selected folder will be used for videos, audio files, and playlist folders.
-                </p>
+
+                <div id="hostedWarning" class="hosted-warning hidden">
+                    This hosted demo runs on Render. YouTube often blocks cloud-server requests,
+                    and downloads save on the server, not on your device. For reliable use, run
+                    the app locally.
+                </div>
 
                 <div id="previewBox" class="preview-box hidden">
                     <span class="preview-label">Detected</span>
