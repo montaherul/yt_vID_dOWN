@@ -17,6 +17,7 @@ const progressFill = document.getElementById("progressFill");
 const saveLocation = document.getElementById("saveLocation");
 
 const LOCAL_API_ORIGIN = "http://127.0.0.1:5000";
+const DEPLOYED_API_ORIGIN = "https://youtube-video-download-fbdm.onrender.com";
 let pollTimer = null;
 let previewTimer = null;
 let previewRequestToken = 0;
@@ -27,12 +28,25 @@ function resolveApiBase() {
     const isFlaskLocalHost =
         (hostname === "127.0.0.1" || hostname === "localhost") &&
         port === "5000";
+    const isRenderHost = hostname === "youtube-video-download-fbdm.onrender.com";
 
-    if (protocol === "file:" || !isFlaskLocalHost) {
+    if (isRenderHost) {
+        return "";
+    }
+
+    if (isFlaskLocalHost) {
+        return "";
+    }
+
+    if (protocol === "file:") {
+        return DEPLOYED_API_ORIGIN;
+    }
+
+    if (hostname === "127.0.0.1" || hostname === "localhost") {
         return LOCAL_API_ORIGIN;
     }
 
-    return "";
+    return DEPLOYED_API_ORIGIN;
 }
 
 const API_BASE = resolveApiBase();
@@ -152,7 +166,7 @@ async function chooseFolder() {
     } catch (error) {
         updateStatusCard({
             title: "Folder selection failed",
-            message: `Could not connect to the Flask backend at ${API_LABEL}. Start it with "python app.py".`,
+            message: `Could not connect to the backend at ${API_LABEL}.`,
             percent: 0,
             extra: "Offline",
             state: "failed",
@@ -205,7 +219,7 @@ async function fetchVideoInfo(url) {
             return;
         }
 
-        showPreview(`Could not connect to the Flask server at ${API_LABEL}. Start it with "python app.py".`);
+        showPreview(`Could not connect to the backend at ${API_LABEL}.`);
     }
 }
 
@@ -354,7 +368,7 @@ form.addEventListener("submit", async (event) => {
     } catch (error) {
         updateStatusCard({
             title: "Server error",
-            message: `Could not connect to the Flask backend at ${API_LABEL}. Start it with "python app.py".`,
+            message: `Could not connect to the backend at ${API_LABEL}.`,
             percent: 0,
             extra: "Offline",
             state: "failed",
