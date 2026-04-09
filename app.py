@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -16,6 +18,8 @@ from yt_dlp.utils import DownloadError
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DOWNLOADS_DIR = BASE_DIR / "downloads"
 DEFAULT_DOWNLOADS_DIR.mkdir(exist_ok=True)
+RUNTIME_DIR = BASE_DIR / ".runtime"
+RUNTIME_DIR.mkdir(exist_ok=True)
 
 app = Flask(__name__)
 CORS(
@@ -66,6 +70,61 @@ QUALITY_OPTIONS = {
         ],
     },
 }
+
+DEFAULT_PLAYER_CLIENTS = ["tv", "ios", "web_safari", "web"]
+
+
+def read_env(name: str) -> str:
+    return os.getenv(name, "").strip()
+
+
+def split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def build_runtime_config() -> dict[str, Any]:
+    player_clients_raw = read_env("YTDLP_PLAYER_CLIENTS")
+    player_clients = split_csv(player_clients_raw) if player_clients_raw else list(DEFAULT_PLAYER_CLIENTS)
+
+    return {
+        "proxy_url": read_env("YTDLP_PROXY_URL"),
+        "source_address": read_env("YTDLP_SOURCE_ADDRESS"),
+        "user_agent": read_env("YTDLP_USER_AGENT"),
+        "cookies_file": read_env("YTDLP_COOKIES_FILE"),
+        "cookies_b64": read_env("YTDLP_COOKIES_B64"),
+        "visitor_data": read_env("YTDLP_VISITOR_DATA"),
+        "po_token": read_env("YTDLP_PO_TOKEN"),
+        "player_clients": player_clients,
+        "render_hostname": read_env("RENDER_EXTERNAL_HOSTNAME"),
+    }
+
+
+RUNTIME_CONFIG = build_runtime_config()
+
+
+def write_runtime_cookie_file() -> Path | None:
+    if RUNTIME_CONFIG["cookies_file"]:
+        cookie_path = Path(RUNTIME_CONFIG["cookies_file"]).expanduser()
+        if cookie_path.exists():
+            return cookie_path.resolve()
+        app.logger.warning("Configured YTDLP_COOKIES_FILE does not exist: %s", cookie_path)
+        return None
+
+    if not RUNTIME_CONFIG["cookies_b64"]:
+        return None
+
+    try:
+        decoded = base64.b64decode(RUNTIME_CONFIG["cookies_b64"]).decode("utf-8")
+    except Exception as error:  # noqa: BLE001
+        app.logger.warning("Could not decode YTDLP_COOKIES_B64: %s", error)
+        return None
+
+    cookie_path = RUNTIME_DIR / "youtube-cookies.txt"
+    cookie_path.write_text(decoded, encoding="utf-8")
+    return cookie_path.resolve()
+
+
+COOKIE_FILE_PATH = write_runtime_cookie_file()
 
 
 def is_youtube_url(url: str) -> bool:
@@ -140,10 +199,17 @@ def explain_download_error(error: Exception) -> str:
     lowered = message.lower()
 
     if "not a bot" in lowered or "sign in to confirm" in lowered:
-        return "YouTube blocked this server request and asked for bot verification. This usually happens on cloud hosts."
+        return (
+            "YouTube blocked this server request and asked for bot verification. "
+            "On Render, configure a proxy plus matching cookies and user-agent, "
+            "or provide a YouTube PO token."
+        )
 
     if "http error 403" in lowered or "forbidden" in lowered:
-        return "YouTube refused this request from the deployed server. This often happens on cloud hosts."
+        return (
+            "YouTube refused this request from the deployed server. "
+            "This usually means the cloud IP needs a proxy, matching cookies, or a PO token."
+        )
 
     if "unable to download api page" in lowered:
         return "The server could not reach YouTube successfully. The deployed host may be blocked."
@@ -151,13 +217,56 @@ def explain_download_error(error: Exception) -> str:
     return message or "yt-dlp could not read this video or playlist."
 
 
-def get_media_info(url: str) -> dict[str, Any]:
-    options = {
+def build_youtube_extractor_args() -> dict[str, list[str]]:
+    extractor_args: dict[str, list[str]] = {
+        "player_client": list(RUNTIME_CONFIG["player_clients"]),
+    }
+
+    if RUNTIME_CONFIG["visitor_data"]:
+        extractor_args["visitor_data"] = [RUNTIME_CONFIG["visitor_data"]]
+        extractor_args["player_skip"] = ["webpage", "configs"]
+
+    if RUNTIME_CONFIG["po_token"]:
+        extractor_args["po_token"] = split_csv(RUNTIME_CONFIG["po_token"])
+        if "mweb" not in extractor_args["player_client"]:
+            extractor_args["player_client"] = ["default", "mweb"]
+
+    return extractor_args
+
+
+def build_common_ydl_options() -> dict[str, Any]:
+    options: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": False,
-        "skip_download": True,
+        "extractor_args": {
+            "youtube": build_youtube_extractor_args(),
+        },
+        "socket_timeout": 30,
+        "retries": 3,
+        "fragment_retries": 3,
     }
+
+    if COOKIE_FILE_PATH:
+        options["cookiefile"] = str(COOKIE_FILE_PATH)
+
+    if RUNTIME_CONFIG["proxy_url"]:
+        options["proxy"] = RUNTIME_CONFIG["proxy_url"]
+
+    if RUNTIME_CONFIG["source_address"]:
+        options["source_address"] = RUNTIME_CONFIG["source_address"]
+
+    if RUNTIME_CONFIG["user_agent"]:
+        options["http_headers"] = {
+            "User-Agent": RUNTIME_CONFIG["user_agent"],
+        }
+
+    return options
+
+
+def get_media_info(url: str) -> dict[str, Any]:
+    options = build_common_ydl_options()
+    options["skip_download"] = True
 
     with YoutubeDL(options) as ydl:
         return ydl.extract_info(url, download=False)
@@ -299,9 +408,7 @@ def build_download_options(
     )
 
     options: dict[str, Any] = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": False,
+        **build_common_ydl_options(),
         "outtmpl": output_template,
         "windowsfilenames": True,
         "format": quality_config["format"],
@@ -542,6 +649,16 @@ def health():
             "success": True,
             "message": "Flask backend is running.",
             "default_download_dir": str(DEFAULT_DOWNLOADS_DIR),
+            "runtime": {
+                "render_hostname": RUNTIME_CONFIG["render_hostname"] or "",
+                "proxy_configured": bool(RUNTIME_CONFIG["proxy_url"]),
+                "cookies_configured": bool(COOKIE_FILE_PATH),
+                "visitor_data_configured": bool(RUNTIME_CONFIG["visitor_data"]),
+                "po_token_configured": bool(RUNTIME_CONFIG["po_token"]),
+                "user_agent_configured": bool(RUNTIME_CONFIG["user_agent"]),
+                "source_address_configured": bool(RUNTIME_CONFIG["source_address"]),
+                "player_clients": RUNTIME_CONFIG["player_clients"],
+            },
         }
     )
 
