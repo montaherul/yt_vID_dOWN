@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="page-shell">
+        <section class="app-card">
+            <div class="hero-copy">
+                <span class="badge">Local YouTube Downloader</span>
+                <h1>Download videos, playlists, or audio in one place.</h1>
+                <p>
+                    Paste a YouTube link, choose the quality you want, and let
+                    the app save everything locally with yt-dlp and FFmpeg.
+                </p>
+            </div>
+
+            <form id="downloadForm" class="download-form">
+                <label class="field-label" for="urlInput">YouTube URL</label>
+                <input
+                    id="urlInput"
+                    name="url"
+                    type="url"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    autocomplete="off"
+                    required
+                >
+                <p class="helper-text">
+                    Run <code>python app.py</code> first. If this page is opened directly
+                    or from Live Server, it will connect to <code>http://127.0.0.1:5000</code>.
+                </p>
+
+                <label class="field-label" for="downloadPathInput">Download folder</label>
+                <div class="path-picker">
+                    <input
+                        id="downloadPathInput"
+                        name="downloadPath"
+                        type="text"
+                        placeholder="Leave blank to use the project downloads folder"
+                        autocomplete="off"
+                    >
+                    <button id="chooseFolderButton" class="secondary-button" type="button">
+                        Browse
+                    </button>
+                </div>
+                <p class="helper-text">
+                    The selected folder will be used for videos, audio files, and playlist folders.
+                </p>
+
+                <div id="previewBox" class="preview-box hidden">
+                    <span class="preview-label">Detected</span>
+                    <p id="previewText">Waiting for a valid link...</p>
+                </div>
+
+                <label class="field-label" for="qualitySelect">Download quality</label>
+                <select id="qualitySelect" name="quality">
+                    <option value="best">Best quality (up to 2K)</option>
+                    <option value="2k">2K (1440p)</option>
+                    <option value="1080p">1080p</option>
+                    <option value="720p">720p</option>
+                    <option value="audio">Audio only (MP3)</option>
+                </select>
+
+                <button id="downloadButton" type="submit">
+                    <span class="button-text">Start Download</span>
+                    <span id="buttonSpinner" class="button-spinner hidden" aria-hidden="true"></span>
+                </button>
+            </form>
+
+            <section id="statusCard" class="status-card hidden" aria-live="polite">
+                <div class="status-header">
+                    <div>
+                        <span class="status-label">Status</span>
+                        <h2 id="statusTitle">Waiting for download</h2>
+                    </div>
+                    <div id="liveSpinner" class="live-spinner hidden" aria-hidden="true"></div>
+                </div>
+
+                <p id="statusMessage" class="status-message">Paste a link to begin.</p>
+
+                <div class="progress-block">
+                    <div class="progress-meta">
+                        <span id="progressText">0%</span>
+                        <span id="progressExtra">Idle</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <p id="saveLocation" class="save-location"></p>
+            </section>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
